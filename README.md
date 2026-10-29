@@ -39,6 +39,26 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+Provenance Guard is a small backend a writing site can call. It takes a piece
+of writing and returns a guess about whether AI wrote it, how confident that
+guess is, a plain-English label for the reader, and a way for the writer to
+appeal.
+
+1. **`POST /submit` receives the text** with a `creator_id` (`app.py::submit`).
+2. **The input is checked.** Missing, empty, too-short or too-long text gets a
+   400 with a reason, and the rejection is logged.
+3. **A `content_id` is minted** (uuid4). It's the handle for appeals and ties
+   the log entries together.
+4. **Signal one scores predictability** (`detector.py::model_signal`).
+5. **Signal two scores the shape of the text** (`stylometry.py::style_signal`).
+6. **The two scores are combined and labeled** (`scoring.py::combine_signals`
+   and `scoring.py::score_to_label`).
+7. **The decision is logged and returned** (`audit.py::log_decision` writes to
+   `logs/audit.jsonl`). The reader sees the label. If the writer disagrees,
+   `POST /appeal` moves the item to `under_review`.
+
+Full design notes, including the false-positive walk-through and the endpoint
+contracts: [design.md](design.md).
 
 
 ---
@@ -53,19 +73,31 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** How predictable the text is to gpt2 (perplexity), turned
+into a 0–1 score where higher means more likely AI.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** A language model
+writes by picking likely next words, so its output is easy for a model to
+predict. People make odd, specific word choices a model wouldn't guess.
 
-**What it can't see:**
+**What it can't see:** Who wrote it. It rewards plainness, not machine
+authorship, so second-language writers, younger writers and anyone writing
+simply score as machine-like. AI text pushed toward rare words can score as
+human. It only reads the first ~400 tokens.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** The shape of the text without reading it: spread of
+sentence lengths, vocabulary variety and punctuation use, combined into a 0–1
+score where higher means more likely AI.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** Generated prose tends
+toward even, mid-length sentences, a narrower vocabulary and tidy punctuation.
+Human writing is lumpier.
 
-**What it can't see:**
+**What it can't see:** Meaning. Typos, broken-up sentences, pasted quotations
+or lists change the shape without changing who wrote it. It's unstable on very
+short text.
 
 ### The combining rule
 
