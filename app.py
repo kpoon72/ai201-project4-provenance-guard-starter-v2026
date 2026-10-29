@@ -30,6 +30,8 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import scoring
+import stylometry
 
 app = Flask(__name__)
 
@@ -228,12 +230,12 @@ def submit():
     except ValueError as exc:
         return _reject(creator_id, "text_too_short", str(exc))
 
+    style_score = stylometry.style_signal(text)
+    confidence = scoring.combine_signals(model_score, style_score)
+
     content_id = str(uuid.uuid4())
 
-    # Placeholders until Milestone 4 (second signal, combined score) and
-    # Milestone 5 (label).
-    style_score = None
-    confidence = model_score
+    # Placeholders until Milestone 5 (label).
     guess = "pending"
     label = "PLACEHOLDER — label comes in Milestone 5."
 

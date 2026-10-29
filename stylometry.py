@@ -63,9 +63,17 @@ def sentence_length_spread(text: str) -> float:
     Watch the edge case: a one-sentence submission has no spread at all, and
     `stdev` raises on fewer than two values. Decide what that should return
     before the attack set decides for you.
+
+    Coefficient of variation of sentence lengths in words: stdev / mean.
+    0 means every sentence is the same length; **higher means more human**.
+    Fewer than two sentences returns None — there's no spread to measure, and
+    0.0 would read as "perfectly even", which is the most AI-like answer.
     """
-    # TODO: replace this
-    return 0.0
+    lengths = [len(words(s)) for s in sentences(text)]
+    lengths = [n for n in lengths if n > 0]
+    if len(lengths) < 2:
+        return None
+    return statistics.stdev(lengths) / statistics.mean(lengths)
 
 
 def type_token_ratio(text: str) -> float:
@@ -79,9 +87,22 @@ def type_token_ratio(text: str) -> float:
     longer, because common words repeat. Two texts of different lengths aren't
     directly comparable on it, and if your test inputs vary a lot in length,
     that alone can look like a signal.
+
+    To keep length out of it, this is the *moving-average* ratio: unique over
+    total inside every 50-word window, averaged. Text shorter than one window
+    gets the plain ratio. **Higher means more human.** No words returns None.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)
+    if not tokens:
+        return None
+    window = 50
+    if len(tokens) <= window:
+        return len(set(tokens)) / len(tokens)
+    ratios = [
+        len(set(tokens[i:i + window])) / window
+        for i in range(len(tokens) - window + 1)
+    ]
+    return statistics.mean(ratios)
 
 
 def punctuation_density(text: str) -> float:
@@ -93,9 +114,16 @@ def punctuation_density(text: str) -> float:
         semicolons, dashes — is a real choice. Semicolons and em dashes are
         more interesting than full stops, because they vary more between
         writers.
+
+    Marks other than the full stop, per 10 words: commas, semicolons, colons,
+    dashes, brackets, quotes, ! ? and ellipses. Full stops are left out because
+    every writer uses them about equally. No words returns None.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)
+    if not tokens:
+        return None
+    marks = re.findall(r"[,;:!?()\"—–…“”]|--|\.\.\.| - ", text)
+    return 10 * len(marks) / len(tokens)
 
 
 # ── Combining them ───────────────────────────────────────────────────────────
@@ -121,9 +149,43 @@ def style_signal(text: str) -> float:
     clearly human, plain conventional human writing, lightly-edited AI — before
     you trust it. Plain and ordinary, not formal: formal prose reads as *human*
     to signal one, and it is plain writing that gets accused.
+
+    Directions, set from the four calibration inputs (README, Signals and
+    Scoring):
+
+      - spread: LOW means AI. Generated sentences march in step.
+      - word variety: HIGH means AI. In short passages the model reaches for
+        a fresh synonym every time; plain human writing repeats its words.
+      - punctuation: HIGH means AI. Generated prose is comma-heavy.
+
+    Each is mapped linearly onto 0–1 between the two anchors below and
+    clipped, then the three are averaged equally. A measure that returns None
+    (too little text) is left out of the average; if all three are None the
+    signal returns 0.5, which says nothing either way.
     """
-    # TODO: replace this
-    return 0.5
+    parts = []
+
+    spread = sentence_length_spread(text)
+    if spread is not None:
+        parts.append(_scale(spread, human=0.8, ai=0.1))
+
+    ttr = type_token_ratio(text)
+    if ttr is not None:
+        parts.append(_scale(ttr, human=0.70, ai=0.95))
+
+    punct = punctuation_density(text)
+    if punct is not None:
+        parts.append(_scale(punct, human=0.2, ai=1.0))
+
+    if not parts:
+        return 0.5
+    return round(statistics.mean(parts), 4)
+
+
+def _scale(value: float, human: float, ai: float) -> float:
+    """Map `value` onto 0 (at the `human` anchor) … 1 (at the `ai` anchor), clipped."""
+    score = (value - human) / (ai - human)
+    return min(max(score, 0.0), 1.0)
 
 
 if __name__ == "__main__":

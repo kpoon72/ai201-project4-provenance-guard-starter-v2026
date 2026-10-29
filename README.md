@@ -104,17 +104,53 @@ short text.
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
-**The rule:**
+**How signal two is built** (`stylometry.py::style_signal`): three measures,
+each mapped linearly onto 0–1 between a "human" anchor and an "AI" anchor,
+clipped, then averaged equally. A measure that can't be computed (one
+sentence, no words) is left out; if none can be, the signal is 0.5.
 
-**The numbers:**
+| Measure | What it computes | Direction | Human anchor → AI anchor |
+|---|---|---|---|
+| Sentence-length spread | stdev / mean of words per sentence | low = AI | 0.8 → 0.1 |
+| Word variety | unique / total words, averaged over 50-word windows | high = AI | 0.70 → 0.95 |
+| Punctuation density | commas, semicolons, dashes, quotes, ! ? etc. per 10 words | high = AI | 0.2 → 1.0 |
+
+The directions for word variety and punctuation came from the calibration run
+below, not from a guess. I expected varied vocabulary to mean human, but the
+AI text had the *most* varied words (0.95) and the most commas (0.91), and
+plain human writing had the least. Flipping them also helps the writer signal
+one is most likely to accuse, because plain writing scores *human* on both.
+
+**The rule:** Average the two signals equally. If they differ by 0.4 or more,
+they disagree, and disagreement means unsure: the combined score is capped at
+0.64, just below the AI line, so a split can never produce an accusation.
+
+**The numbers:** `WEIGHT_MODEL_SIGNAL = 0.5`, `WEIGHT_STYLE_SIGNAL = 0.5`,
+`DISAGREEMENT_GAP = 0.4`, `DISAGREEMENT_CAP = 0.64`, `HUMAN_THRESHOLD = 0.35`,
+`AI_THRESHOLD = 0.65`, all in `config.py`.
 
 **Where it lives:** `scoring.py::combine_signals`
 
-<!-- ⚠️ The grader checks your code against that line. If your rule lives
-     somewhere else, say where. -->
+**Calibration run** (four deliberately chosen inputs through `POST /submit`):
 
-**A case where my two signals split, and what my rule does with it:**
+| Input | model_score | style_score | combined |
+|---|---|---|---|
+| Clearly AI (generic essay on AI's benefits and risks) | 0.788 | 0.867 | 0.828 |
+| Clearly human (casual note: bus, sleet, grandma's soup) | 0.312 | 0.387 | 0.349 |
+| Plain human (short, even sentences about starting to run) | 0.824 | 0.421 | 0.623 |
+| Lightly-edited AI (the AI essay reworded casually) | 0.681 | 0.602 | 0.641 |
 
+Clearly AI and clearly human are 0.48 apart. The lightly-edited AI lands in
+"unsure", just under the AI line: light editing is enough to get past it.
+
+**A case where my two signals split, and what my rule does with it:** The
+plain human paragraph. Signal one says 0.82 (AI), because short common-word
+sentences are easy for gpt2 to predict. Signal two says 0.42 (leaning human),
+because its vocabulary repeats and it uses almost no punctuation. They differ
+by 0.40, so the disagreement rule applies: the combined score can't exceed
+0.64, and the writer gets "unsure" rather than an accusation. Here the plain
+average (0.62) was already under the cap. The cap matters when the model signal
+is higher still.
 
 
 ---

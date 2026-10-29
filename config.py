@@ -61,6 +61,12 @@ MAX_TEXT_CHARS = 10_000
 WEIGHT_MODEL_SIGNAL = 0.5
 WEIGHT_STYLE_SIGNAL = 0.5
 
+# When the two signals differ by at least this much, they disagree, and
+# disagreement is uncertainty: the combined score is capped just below
+# AI_THRESHOLD so it can never produce the AI label on its own.
+DISAGREEMENT_GAP = 0.4
+DISAGREEMENT_CAP = 0.64
+
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
 # Where one label becomes another. Scores run 0.0 (confidently human) to 1.0
