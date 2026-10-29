@@ -164,15 +164,21 @@ is higher still.
 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 – 0.35 | We think this was written by a person. |
+| unsure | 0.35 – 0.65 | We couldn't tell whether this was written by a person or with AI help, so we haven't made any judgment about it. Nothing about your work has been flagged. |
+| high-confidence AI | 0.65 – 1.00 | Our system thinks this was likely written with AI help. This is an automated guess, not a final decision. If you wrote it yourself, you can appeal and a person will review it. |
 
-**Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
+A score of exactly 0.35 is human and exactly 0.65 is AI
+(`scoring.py::score_to_label`), so every score from 0 to 1 gets one of the
+three labels. All three were reached in testing: the calibration "clearly
+AI" text scored 0.828 (AI), "clearly human" 0.349 (human), and "plain human"
+0.623 (unsure).
 
+**Why I worded the "unsure" one this way:** Many writers who land in "unsure"
+wrote every word themselves. Plain human writing is exactly what lands there.
+So the label says plainly that no judgment was made and nothing was flagged,
+and it doesn't hint at suspicion. The AI label is worded as the system's guess
+rather than a fact about the writer, and it always says how to appeal.
 
 
 ---
@@ -192,42 +198,92 @@ is higher still.
 > Run on port 5001 (`PORT=5001 python app.py`): on macOS the AirPlay Receiver
 > holds port 5000 and answers every request with a 403.
 
-*Milestone 3 — one signal, placeholder confidence and label:*
+The submission is a generic AI-style test paragraph, so it gets the AI label.
+The appeal is then sent against its `content_id`.
 
 ```bash
 $ curl -X POST http://127.0.0.1:5001/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "I started running last spring because my doctor told me to. The first week was hard and I could barely finish a mile. Now I run three times a week and I feel much better. My knees still hurt sometimes, but I think it is worth it.", "creator_id": "kamal"}'
+  -d '{"text": "Artificial intelligence has transformed many industries in recent years. It offers numerous benefits, including increased efficiency and improved decision-making. However, it also presents significant challenges that must be carefully addressed. Organizations should consider ethical implications, data privacy, and workforce impacts. By adopting a balanced approach, society can harness the potential of artificial intelligence while minimizing its risks. Overall, the future of artificial intelligence looks promising.", "creator_id": "kamal"}'
 ```
 
 ```json
 {
-  "confidence": 0.8174,
-  "content_id": "cb1ff141-eb66-4700-8199-b739cb93b333",
+  "confidence": 0.8277,
+  "content_id": "106c3cd0-e8be-4a44-a311-2891671ea61d",
   "creator_id": "kamal",
-  "guess": "pending",
-  "label": "PLACEHOLDER — label comes in Milestone 5.",
-  "model_score": 0.8174,
+  "guess": "ai",
+  "label": "Our system thinks this was likely written with AI help. This is an automated guess, not a final decision. If you wrote it yourself, you can appeal and a person will review it.",
+  "model_score": 0.7881,
   "status": "decided",
-  "style_score": null
+  "style_score": 0.8674
 }
 ```
 
-The log entry it wrote (`logs/audit.jsonl`):
+**An appeal**
+
+```bash
+$ curl -X POST http://127.0.0.1:5001/appeal \
+  -H "Content-Type: application/json" \
+  -d '{"content_id": "106c3cd0-e8be-4a44-a311-2891671ea61d", "reasoning": "I wrote this essay myself for my AI201 class. I used a formal style because it was an assignment."}'
+```
 
 ```json
 {
-  "timestamp": "2026-10-29T00:41:04+00:00",
-  "content_id": "cb1ff141-eb66-4700-8199-b739cb93b333",
-  "creator_id": "kamal",
-  "guess": "pending",
-  "model_score": 0.8174,
-  "style_score": null,
-  "combined_score": 0.8174,
-  "label": "PLACEHOLDER — label comes in Milestone 5.",
-  "status": "decided"
+  "content_id": "106c3cd0-e8be-4a44-a311-2891671ea61d",
+  "message": "Thanks \u2014 we've received your appeal. A person will review this decision, and it's marked as under review until they do.",
+  "original_guess": "ai",
+  "status": "under_review"
 }
 ```
+
+An appeal for an id that doesn't exist is refused instead of failing silently:
+
+```bash
+$ curl -X POST http://127.0.0.1:5001/appeal \
+  -H "Content-Type: application/json" \
+  -d '{"content_id": "not-a-real-id", "reasoning": "test"}'
+```
+
+```json
+{
+  "error": "unknown_content_id",
+  "message": "No submission has the id 'not-a-real-id'."
+}
+```
+
+**What the log shows afterwards**
+
+The two entries for this `content_id`: the original decision, untouched, and
+the appeal after it with `status: "under_review"`.
+
+```bash
+$ curl "http://127.0.0.1:5001/log?limit=10"
+```
+
+```json
+{
+  "combined_score": 0.8277,
+  "content_id": "106c3cd0-e8be-4a44-a311-2891671ea61d",
+  "creator_id": "kamal",
+  "guess": "ai",
+  "label": "Our system thinks this was likely written with AI help. This is an automated guess, not a final decision. If you wrote it yourself, you can appeal and a person will review it.",
+  "model_score": 0.7881,
+  "status": "decided",
+  "style_score": 0.8674,
+  "timestamp": "2026-10-29T00:47:34+00:00"
+},
+{
+  "content_id": "106c3cd0-e8be-4a44-a311-2891671ea61d",
+  "creator_id": "kamal",
+  "event": "appeal",
+  "reasoning": "I wrote this essay myself for my AI201 class. I used a formal style because it was an assignment.",
+  "status": "under_review",
+  "timestamp": "2026-10-29T00:47:34+00:00"
+}
+```
+
+### Earlier checks
 
 Bad input gets a 400 and a rejection entry instead of a crash:
 
@@ -274,27 +330,43 @@ What one signal says about three texts (`python detector.py "..."`):
 The plain human paragraph scores almost as AI-like as the AI one. That's the
 blind spot named above: signal one rewards plainness, not machine authorship.
 
-**An appeal**
+*Milestone 3 — one signal, placeholder confidence and label:*
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
+$ curl -X POST http://127.0.0.1:5001/submit \
   -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+  -d '{"text": "I started running last spring because my doctor told me to. The first week was hard and I could barely finish a mile. Now I run three times a week and I feel much better. My knees still hurt sometimes, but I think it is worth it.", "creator_id": "kamal"}'
 ```
 
 ```json
-
+{
+  "confidence": 0.8174,
+  "content_id": "cb1ff141-eb66-4700-8199-b739cb93b333",
+  "creator_id": "kamal",
+  "guess": "pending",
+  "label": "PLACEHOLDER — label comes in Milestone 5.",
+  "model_score": 0.8174,
+  "status": "decided",
+  "style_score": null
+}
 ```
 
-**What the log shows afterwards**
-
-```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
-```
+The log entry it wrote (`logs/audit.jsonl`):
 
 ```json
-
+{
+  "timestamp": "2026-10-29T00:41:04+00:00",
+  "content_id": "cb1ff141-eb66-4700-8199-b739cb93b333",
+  "creator_id": "kamal",
+  "guess": "pending",
+  "model_score": 0.8174,
+  "style_score": null,
+  "combined_score": 0.8174,
+  "label": "PLACEHOLDER — label comes in Milestone 5.",
+  "status": "decided"
+}
 ```
+
 
 ---
 

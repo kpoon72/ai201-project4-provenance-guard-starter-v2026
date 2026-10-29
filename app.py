@@ -233,11 +233,9 @@ def submit():
     style_score = stylometry.style_signal(text)
     confidence = scoring.combine_signals(model_score, style_score)
 
-    content_id = str(uuid.uuid4())
+    guess, label = scoring.score_to_label(confidence)
 
-    # Placeholders until Milestone 5 (label).
-    guess = "pending"
-    label = "PLACEHOLDER — label comes in Milestone 5."
+    content_id = str(uuid.uuid4())
 
     audit.log_decision(
         content_id=content_id,
@@ -288,14 +286,40 @@ def appeal():
     to the person on the other end. It's the only thing standing between a
     wrong accusation and nothing at all.
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "invalid_json",
+                        "message": "Send a JSON object with \"content_id\" and \"reasoning\"."}), 400
 
-    # TODO: delete this and build the route.
+    content_id = payload.get("content_id")
+    if not isinstance(content_id, str) or not content_id.strip():
+        return jsonify({"error": "missing_content_id",
+                        "message": "\"content_id\" is required."}), 400
+
+    reasoning = payload.get("reasoning")
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return jsonify({"error": "missing_reasoning",
+                        "message": "Tell us why you think the decision is wrong."}), 400
+
+    decisions = [e for e in audit.entries_for(content_id) if e.get("status") == "decided"]
+    if not decisions:
+        return jsonify({"error": "unknown_content_id",
+                        "message": f"No submission has the id {content_id!r}."}), 404
+
+    original = decisions[-1]
+    audit.log_appeal(
+        content_id=content_id,
+        creator_id=original["creator_id"],
+        reasoning=reasoning,
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+        "content_id": content_id,
+        "status": "under_review",
+        "original_guess": original.get("guess"),
+        "message": "Thanks — we've received your appeal. A person will review "
+                   "this decision, and it's marked as under review until they do.",
+    })
 
 
 # ── Already works ─────────────────────────────────────────────────────────────
