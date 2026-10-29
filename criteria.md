@@ -1,104 +1,77 @@
 # Acceptance criteria — Provenance Guard
 
 Five criteria that say what "working" means for this service, written in unit 7
-**before** you built it.
-
-**All five are yours.** None are given.
-
-An acceptance criterion names a number or something plainly observable. *"The
-detector is accurate"* is an opinion — and perfect AI detection isn't possible
-anyway, so it's an opinion about something nobody can deliver. *"Of 10 pieces I
-wrote myself, at most 1 is labelled high-confidence AI"* is a criterion.
-
-Under each, write a sentence or two on **why that target**. *"I allow at most 1
-false positive in 10 because on a writing site a wrong accusation costs more
-than a missed detection"* is a real answer.
-
-> Missing your own targets next unit costs you nothing. Setting a target so
-> easy you can't miss it does.
+**before** the service was built. Each one must hold in **every** trial, not on
+average: the model signal can score identical text differently twice.
 
 ---
 
-## Pick numbers you can defend
+## 1. No false accusations on my own writing
 
-**Cover at least three of these five areas.** They're prompts, not a form.
+Of 10 pieces I wrote myself, **0** are labeled high-confidence AI (`guess` is
+`"ai"`), in every trial.
 
-| Area | A question it could answer |
-|---|---|
-| False positives | How often may a human's writing get called AI? |
-| Score spread | How far apart should clearly-AI and clearly-human text score? |
-| Label coverage | Is every one of your three labels actually reachable? |
-| The appeal path | Does an appeal always change status and always get recorded? |
-| Bad input | What happens when `text` is missing, empty, or enormous? |
-
-Two things worth knowing before you pick numbers:
-
-- **The expensive mistake is one-sided.** Missing some AI text costs the site a
-  little. Accusing a real writer costs that person a lot. A criterion that
-  treats both errors as equally bad is describing a system nobody would ship.
-- **Unit 8 tests across three trials, and the target has to hold across all
-  three.** Your first signal runs a model, so identical input can score
-  differently twice. A target of "at most 1 in 10" against trials of 2, 1, 2 is
-  a **miss**.
-
----
-## 1.
-
-<!-- Your criterion. It must name a number. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** On a writing site, calling a real writer a cheater is the
+worst thing this system can do. It hurts the person publicly, and they have
+less power to argue than the site does. Missing some AI text costs the site a
+little, so I would rather let AI text through as "unsure" than accuse even one
+person in ten.
 
 ---
 
-## 2.
+## 2. Clearly-AI and clearly-human text score far apart
 
-<!-- Your criterion. -->
+Over 5 pieces I judge clearly AI-generated and 5 pieces I judge clearly
+human-written, the average `confidence` of the AI set is **at least 0.30
+higher** than the average of the human set, in every trial.
 
-
-
-**Why this target:**
-
-
-
----
-
-## 3.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** My unsure band runs from 0.35 to 0.65, which is 0.30 wide.
+If the two groups are less than 0.30 apart, they can't land in different
+labels, so the score isn't telling them apart in a way a reader would ever
+see.
 
 ---
 
-## 4.
+## 3. Every label can actually be reached
 
-<!-- Your criterion. -->
+Across my test inputs, **at least 1** submission lands in each of the three
+labels (high-confidence AI, unsure, high-confidence human), in every trial.
 
-
-
-**Why this target:**
-
-
+**Why this target:** A label nobody can reach is a gap in the system. If the
+human label is never shown, every real writer gets "unsure" or worse. One
+reachable example per label proves the score range has no hole in it.
 
 ---
 
-## 5.
+## 4. Every appeal is recorded and changes status
 
-<!-- Your criterion. -->
+**100%** of appeals sent with a `content_id` from a real submission return
+`status: "under_review"` and add an appeal entry for that `content_id` to
+`logs/audit.jsonl`. Tested with at least 5 appeals per trial, 0 failures
+allowed. An appeal with an unknown `content_id` returns a 404, not a 200.
 
+**Why this target:** The appeal is the only thing between a wrong accusation
+and nothing at all. A lost appeal means a wrongly accused writer spoke up and
+nobody heard, so any failure here is too many.
 
+---
 
-**Why this target:**
+## 5. Bad input gets a clear error, never a crash
 
+Each of these inputs to `POST /submit` returns a **400** with an error message,
+**every time**, and never a 500 or a label:
 
+- `text` missing
+- `text` empty, or only whitespace
+- `text` not a string (a number, list or null)
+- `text` longer than **10,000 characters**
+- `creator_id` missing or empty
+- a body that isn't JSON, or is JSON but not an object
+
+**Why this target:** A crash tells the writer nothing and can leave a request
+with no trace in the log. A clear 400 tells them what to fix. 10,000
+characters (about 1,700 words) covers a long essay or poem, keeps the model
+fast, and stops someone sending a huge text to slow the service down.
 
 ---
 

@@ -95,7 +95,7 @@ Request:
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `text` | string | yes | Non-empty after trimming. Max 20,000 characters |
+| `text` | string | yes | Non-empty after trimming. Max 10,000 characters |
 | `creator_id` | string | yes | Non-empty. Who wrote it |
 
 Response `200`:
