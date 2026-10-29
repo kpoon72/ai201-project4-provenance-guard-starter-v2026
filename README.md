@@ -372,17 +372,38 @@ The log entry it wrote (`logs/audit.jsonl`):
 
 ## How I Used AI
 
-**Moment 1**
+I used Claude Code (Claude Opus 5.5) throughout this project. It wrote most of
+the code and drafted the design notes. I made the decisions, reviewed each
+milestone and made every commit myself.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 1 — the acceptance criteria**
 
-**Moment 2**
+- *What I asked for:* Help writing `criteria.md`. I asked Claude to write the
+  criteria for me.
+- *What came back:* It said the brief doesn't allow a model to write the
+  criteria. Instead it asked me to choose a target for each area, with the
+  trade-off of each option. After I chose, it pointed out that two of my
+  picks (a 0.20 score spread and 1 piece per label) were easy enough that I
+  could hardly miss them.
+- *What I changed:* I raised the score-spread target from 0.20 to 0.30 and kept
+  the rest, including 0 of 10 false positives, even though Claude warned it
+  might be hard to meet with gpt2. Claude drafted the "Why this target" reasons
+  from my choices. I read them and kept them.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 2 — the style signal and the combining rule**
+
+- *What I asked for:* Build the style signal and show me options for combining
+  the two signals.
+- *What came back:* Claude's first assumption, that varied vocabulary means
+  human, was wrong on the calibration texts: the AI text had the *most* varied
+  words and the most commas. It flipped those two directions and showed me four
+  combining rules, with each one's scores on my four test inputs.
+- *What I changed:* I rejected the 60/40 model-heavy rule because it labeled
+  the plain human paragraph as AI (0.66), which breaks my criterion 1. I chose
+  equal weights plus a disagreement cap, so that when the signals split by 0.4
+  or more, the writer gets "unsure" instead of an accusation. I also picked the
+  wording of all three labels from Claude's drafts, choosing the "no judgment"
+  version of the unsure label.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
