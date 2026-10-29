@@ -153,15 +153,90 @@ short text.
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
 
+> Run on port 5001 (`PORT=5001 python app.py`): on macOS the AirPlay Receiver
+> holds port 5000 and answers every request with a 403.
+
+*Milestone 3 — one signal, placeholder confidence and label:*
+
 ```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
+$ curl -X POST http://127.0.0.1:5001/submit \
   -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+  -d '{"text": "I started running last spring because my doctor told me to. The first week was hard and I could barely finish a mile. Now I run three times a week and I feel much better. My knees still hurt sometimes, but I think it is worth it.", "creator_id": "kamal"}'
 ```
 
 ```json
-
+{
+  "confidence": 0.8174,
+  "content_id": "cb1ff141-eb66-4700-8199-b739cb93b333",
+  "creator_id": "kamal",
+  "guess": "pending",
+  "label": "PLACEHOLDER — label comes in Milestone 5.",
+  "model_score": 0.8174,
+  "status": "decided",
+  "style_score": null
+}
 ```
+
+The log entry it wrote (`logs/audit.jsonl`):
+
+```json
+{
+  "timestamp": "2026-10-29T00:41:04+00:00",
+  "content_id": "cb1ff141-eb66-4700-8199-b739cb93b333",
+  "creator_id": "kamal",
+  "guess": "pending",
+  "model_score": 0.8174,
+  "style_score": null,
+  "combined_score": 0.8174,
+  "label": "PLACEHOLDER — label comes in Milestone 5.",
+  "status": "decided"
+}
+```
+
+Bad input gets a 400 and a rejection entry instead of a crash:
+
+```bash
+$ curl -X POST http://127.0.0.1:5001/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "   ", "creator_id": "k"}'
+```
+
+```json
+{
+  "error": "empty_text",
+  "message": "\"text\" can't be empty."
+}
+```
+
+```bash
+$ curl "http://127.0.0.1:5001/log?limit=1"
+```
+
+```json
+{
+  "count": 1,
+  "entries": [
+    {
+      "creator_id": "k",
+      "event": "rejected",
+      "reason": "text_too_long",
+      "status": "rejected",
+      "timestamp": "2026-10-29T00:41:04+00:00"
+    }
+  ]
+}
+```
+
+What one signal says about three texts (`python detector.py "..."`):
+
+| Text | model_signal |
+|---|---|
+| Generic AI-style paragraph about AI's benefits and challenges | 0.8647 |
+| Casual human note with slang and typos ("ok so the bus never came??") | 0.0368 |
+| Plain human paragraph about starting to run | 0.8174 |
+
+The plain human paragraph scores almost as AI-like as the AI one. That's the
+blind spot named above: signal one rewards plainness, not machine authorship.
 
 **An appeal**
 

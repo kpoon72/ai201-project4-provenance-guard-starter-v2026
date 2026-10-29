@@ -46,6 +46,10 @@ DETECTOR_MODEL = os.getenv("AI201_DETECTOR_MODEL", "gpt2")
 # 300 words, which is enough for the signal to mean something.
 DETECTOR_MAX_TOKENS = 400
 
+# The longest submission /submit accepts, in characters. About 1,700 words —
+# a long essay or poem. Anything longer gets a 400 (criteria.md, criterion 5).
+MAX_TEXT_CHARS = 10_000
+
 
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.
