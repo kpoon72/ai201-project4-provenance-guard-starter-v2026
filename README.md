@@ -582,17 +582,121 @@ whose work got caught by it:
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. My own writing labeled AI | 0 of 10 | 7/10 | 7/10 | 7/10 | MISSED |
+| 2. Gap between clearly-AI and clearly-human averages | ≥ 0.30 | 0.099 | 0.099 | 0.099 | MISSED |
+| 3. All three labels reached by my test inputs | 3 of 3 | 2/3 | 2/3 | 2/3 | MISSED |
+| 4. Valid appeals return under_review and are logged; unknown id gets 404 | 5 of 5, plus 404 | 5/5, 404 | 5/5, 404 | 5/5, 404 | MET |
+| 5. Bad input gets a 400 | 11 of 11 | 11/11 | 11/11 | 9/11 | MISSED |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+How the trials were run:
+
+- **Criteria 1, 2, 3 and most of 5:** `python run_eval.py --label before`,
+  using the scenarios in `scenarios.py`. Report:
+  `results/run_2026-11-08_2055_before.md`, produced by `run_eval.py::main`.
+- **Criterion 4 and the two bodies that aren't JSON objects:**
+  `run_eval.py` only calls `/submit` and always sends a JSON object, so I
+  added `eval_appeals.py`. Each trial submits 5 texts, appeals each one, and
+  reads `GET /log` back to check the appeal entry landed. It also sends an
+  unknown id and the two non-object bodies. Report:
+  `results/appeals_2026-11-08_2048_before.md`, produced by
+  `eval_appeals.py::main`.
+
+The scores were identical in all three trials, as expected: neither signal is
+random. Criterion 5 is the only one that differed, and that came from the
+rate limiter, not the scoring.
+
+**Real output from one trial**
+
+*Criterion 1:* one of my own pieces labeled AI. Trial 1, `run_eval.py::main`:
 
 ```json
+{
+  "status": 200,
+  "guess": "ai",
+  "confidence": 0.8086,
+  "model_score": 0.9123,
+  "style_score": 0.7049,
+  "label": "Our system thinks this was likely written with AI help. This is an automated guess, not a final decision. If you wrote it yourself, you can appeal and a person will review it.",
+  "sent": "One place I remember very well is Nepal, where I grew up. Even though "
+}
+```
 
+All ten of my pieces, combined score (model / style), same in every trial:
+0.63 (0.79/0.46) unsure, 0.57 (0.82/0.32) unsure, **0.81** (0.91/0.70) AI,
+0.62 (0.83/0.41) unsure, **0.80** (0.83/0.78) AI, **0.80** (0.94/0.66) AI,
+**0.78** (0.91/0.65) AI, **0.68** (0.83/0.52) AI, **0.79** (0.85/0.73) AI,
+**0.77** (0.85/0.68) AI.
+
+*Criterion 2:* one clearly-AI piece. Trial 1, `run_eval.py::main`:
+
+```json
+{
+  "status": 200,
+  "guess": "ai",
+  "confidence": 0.8863,
+  "model_score": 0.9353,
+  "style_score": 0.8373,
+  "label": "Our system thinks this was likely written with AI help. This is an automated guess, not a final decision. If you wrote it yourself, you can appeal and a person will review it.",
+  "sent": "Climate change is one of the most pressing challenges facing the world"
+}
+```
+
+Clearly-AI average 0.785 (0.82, 0.89, 0.75, 0.73, 0.74). Clearly-human average
+0.686 (0.63, 0.57, 0.81, 0.62, 0.80, my first five pieces). Gap 0.099.
+
+*Criterion 3:* labels seen across all 22 text inputs in a trial: `ai` and
+`unsure`, never `human`. The lowest score of any input was 0.57. Borderline
+set, trial 1: 0.73 AI and 0.63 unsure.
+
+*Criterion 4:* one appeal. Trial 1, `eval_appeals.py::main`:
+
+```json
+{
+  "content_id": "e97a7731-79ab-42c1-9d84-7ef35fd06929",
+  "submit_status": 200,
+  "appeal_status": 200,
+  "status_returned": "under_review",
+  "appeal_entries_in_log": 1,
+  "log_entry": {
+    "content_id": "e97a7731-79ab-42c1-9d84-7ef35fd06929",
+    "creator_id": "eval_appeal_1",
+    "event": "appeal",
+    "reasoning": "Eval trial 1: testing that an appeal is recorded.",
+    "status": "under_review",
+    "timestamp": "2026-11-09T02:48:39+00:00"
+  }
+}
+```
+
+```json
+{
+  "status": 404,
+  "response": {
+    "error": "unknown_content_id",
+    "message": "No submission has the id '00000000-0000-0000-0000-000000000000'."
+  }
+}
+```
+
+*Criterion 5:* trial 3. A missing-`text` body got a 400, but the body with an
+empty `creator_id` (`run_eval.py::main`) and the JSON-array body
+(`eval_appeals.py::main`) both got a 429:
+
+```json
+{"status": 400, "guess": null, "confidence": null, "model_score": null, "style_score": null, "label": null, "sent": "{\"creator_id\": \"eval_bad_missing\"}"}
+{"status": 429, "guess": null, "confidence": null, "model_score": null, "style_score": null, "label": null, "sent": "A real sentence with an empty creator."}
+```
+
+```json
+{
+  "sent": "body is a JSON array",
+  "status": 429,
+  "response": {
+    "error": "rate_limited",
+    "limit": "5 per 1 minute",
+    "message": "Too many submissions. Try again shortly."
+  }
+}
 ```
 
 **Diagnoses**
