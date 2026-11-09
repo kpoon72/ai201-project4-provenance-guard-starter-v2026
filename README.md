@@ -411,24 +411,50 @@ milestone and made every commit myself.
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 50 per day (`config.py`, applied to `POST /submit`
+in `app.py`)
 
-**Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
+**Why those numbers and not others:** A real writer posts a piece, maybe fixes
+a typo and posts again. That's a few submissions in a minute and rarely more
+than a handful in a day, so 5 per minute and 50 per day never get in their way.
+A script trying to map my thresholds needs hundreds of slightly different
+variations. At 5 per minute it can send only one probe every 12 seconds, and
+at 50 per day it gets a single small batch, not enough to find where 0.65
+sits. I chose the stricter numbers over the starter's 10 and 200 because the
+day limit is what really stops slow, patient probing.
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+**What a caller counts as:** The `creator_id` in the request, falling back to
+the caller's IP address when there's no usable `creator_id`
+(`app.py::rate_limit_key`). The weakness: a script can make up a new
+`creator_id` for every request and never hit the limit, so per-creator limits
+only work if creator ids are tied to real accounts. Per address would stop
+that, but would also make one household or school network share one limit.
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
+```
+$ python run_attacks.py --flood 15
+15 submissions as 'flood_tester' against http://127.0.0.1:5001
 
+============================================================
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
+============================================================
+
+10 of 15 were rate limited.
+Wrote results/flood_2026-11-08_2038.md
 ```
 
+Each 429 leaves a rejection in the audit log:
+
+```json
+{
+  "creator_id": "flood_tester",
+  "event": "rejected",
+  "limit": "5 per 1 minute",
+  "reason": "rate_limited",
+  "status": "rejected",
+  "timestamp": "2026-11-09T02:38:40+00:00"
+}
 ```
 
 ---
