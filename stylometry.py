@@ -156,11 +156,15 @@ def style_signal(text: str) -> float:
       - spread: LOW means AI. Generated sentences march in step.
       - word variety: HIGH means AI. In short passages the model reaches for
         a fresh synonym every time; plain human writing repeats its words.
-      - punctuation: HIGH means AI. Generated prose is comma-heavy.
+    Punctuation density is no longer part of the signal (unit 8 improvement).
+    Its "high means AI" direction came from four generated texts, and on real
+    human writing that lists things with commas it maxed out and pushed my own
+    writing over the AI line. `punctuation_density` is still computed and
+    printed below, just not counted.
 
     Each is mapped linearly onto 0–1 between the two anchors below and
-    clipped, then the three are averaged equally. A measure that returns None
-    (too little text) is left out of the average; if all three are None the
+    clipped, then the two are averaged equally. A measure that returns None
+    (too little text) is left out of the average; if both are None the
     signal returns 0.5, which says nothing either way.
     """
     parts = []
@@ -172,10 +176,6 @@ def style_signal(text: str) -> float:
     ttr = type_token_ratio(text)
     if ttr is not None:
         parts.append(_scale(ttr, human=0.70, ai=0.95))
-
-    punct = punctuation_density(text)
-    if punct is not None:
-        parts.append(_scale(punct, human=0.2, ai=1.0))
 
     if not parts:
         return 0.5

@@ -855,21 +855,111 @@ human writing it pushes the same way.
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** I removed punctuation density from signal two.
+`stylometry.py::style_signal` now averages two measures, sentence-length
+spread and word variety, instead of three. That is the only change: weights,
+thresholds, the disagreement rule, the labels and the route are all the same.
 
-**Which diagnosis pointed at it:**
+**Which diagnosis pointed at it:** Criterion 1. On my own writing, the
+punctuation measure maxed out at 1.00 AI on three pieces because I list things
+with commas. Its "more punctuation = AI" direction came from four texts I made
+up in unit 7. I expected that removing it would bring my writing down.
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+`python run_attacks.py --set attack_set --label after`, full report in
+`results/attack_run_2026-11-08_2059_after.md`, marked with the same rules as
+before.
 
+| Family | Before: held / broke | After: held / broke |
+|---|---|---|
+| evasion | 2 / 8 | 3 / 7 |
+| false_positive | **8 / 0** | **6 / 2** |
+| prompt_injection | 3 / 3 | 4 / 2 |
+| malformed | 18 / 2 | 18 / 2 |
+| flood_same_creator | 12 / 0 | 12 / 0 |
+| **total** | **43 / 13** | **43 / 13** |
 
+Every attack whose outcome changed:
 
-**Did it help, and how do I know:**
+| ID | Targeting | Before | After | Verdict change |
+|---|---|---|---|---|
+| EV04 | signal one: unusual words | unsure 0.646 | ai 0.770 | BROKE → HELD |
+| EV07 | signal two: padding with punctuation | ai 0.689 | unsure 0.584 | HELD → BROKE |
+| EV09 | AI text with a human opening paragraph | unsure 0.639 | ai 0.705 | BROKE → HELD |
+| **FP03** | **a non-native English speaker writing carefully** | unsure 0.595 | **ai 0.691** | **HELD → BROKE** |
+| **FP04** | **a student essay written to a rubric** | unsure 0.600 | **ai 0.692** | **HELD → BROKE** |
+| PI03 | instruction wrapped in the writer's voice | unsure 0.627 | ai 0.684 | BROKE → HELD |
+| MF03 | control characters | human 0.250 | unsure 0.500 | BROKE → HELD |
+| MF05 | a very long single word | unsure 0.640 | ai 0.999 | HELD → BROKE |
+| FL01_01–05 | repeated test sentence | human 0.264 | unsure 0.514 | HELD (the flood family is judged on the 429s, which didn't change) |
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+All other attacks kept the same outcome.
 
+**Run log — after.** `python run_eval.py --label after` and
+`python eval_appeals.py --label after`, same scenarios, three trials each:
+
+| Criterion | Target | Before (runs 1 / 2 / 3) | After (runs 1 / 2 / 3) | Verdict before → after |
+|---|---|---|---|---|
+| 1. My own writing labeled AI | 0 of 10 | 7 / 7 / 7 | **8 / 8 / 8** | MISSED → MISSED (worse) |
+| 2. Gap, clearly-AI vs clearly-human | ≥ 0.30 | 0.099 / 0.099 / 0.099 | 0.147 / 0.147 / 0.147 | MISSED → MISSED |
+| 3. All three labels reached | 3 of 3 | 2 / 2 / 2 | 2 / 2 / 2 | MISSED → MISSED |
+| 4. Appeals recorded, unknown id 404 | 5 of 5 + 404 | 5 / 5 / 5 | 5 / 5 / 5 | MET → MET |
+| 5. Bad input gets a 400 | 11 of 11 | 11 / 11 / 9 | 11 / 11 / 9 | MISSED → MISSED |
+
+Reports: `results/run_2026-11-08_2059_after.md` (criteria 1–3),
+`results/run_2026-11-08_2104_after_spaced.md` and
+`results/appeals_2026-11-08_2102_after_spaced.md` (criteria 4–5).
+
+*A note on criterion 5's timing.* My first after-run of `eval_appeals.py` and
+`run_eval.py` started seconds after the attack run, while the per-IP bucket was
+still full, and every no-creator body got a 429
+(`results/appeals_2026-11-08_2059_after.md`, `results/run_2026-11-08_2059_after.md`).
+In the before round there were minutes between those runs. So I waited two
+minutes and re-ran both (`_after_spaced`), and they matched the before numbers
+exactly. Criteria 1–3 are identical in both after-runs, since the scores are
+deterministic. A third rerun I started too soon, which ran into the
+per-creator limit as well, was discarded. The point stands either way: criterion 5
+depends on how recently the same IP sent a request, and the change didn't
+touch it.
+
+Real output after the change. One of my own pieces that moved from unsure to
+AI (piece 1), `run_eval.py::main`:
+
+```json
+{
+  "status": 200,
+  "guess": "ai",
+  "confidence": 0.6787,
+  "model_score": 0.7886,
+  "style_score": 0.5689,
+  "label": "Our system thinks this was likely written with AI help. This is an automated guess, not a final decision. If you wrote it yourself, you can appeal and a person will review it.",
+  "sent": "Last weekend, I spent some time relaxing and taking care of things aro"
+}
+```
+
+**Did it help, and how do I know:** No. It made the thing I was trying to fix
+worse, and it created a new problem in the area that matters most.
+
+- **My own writing went from 7 to 8 of 10 labeled AI.** I was wrong about
+  which way punctuation pushed. On pieces 3, 5 and 9 it was maxed out, but on
+  pieces 1 and 2 it was *low* (0.25 and 0.22) and was holding the style score
+  down. Removing it left only spread and word variety, and my sentences are
+  even (spread 0.20–0.42), so the style score went *up* on exactly the pieces
+  that had been safe. Piece 1 went from 0.63 to 0.68 and crossed the line.
+- **Two attack-set false positives appeared where there were none.** FP03
+  (a careful non-native writer) and FP04 (a rubric essay) now get the AI
+  label. Before the change all eight false-positive attacks held.
+- **The gains are on the AI-catching side.** EV04, EV09 and PI03 are now
+  caught, and the score gap grew from 0.099 to 0.147. The total broke count is
+  unchanged at 13, but the mix moved toward accusing real writers. My criteria
+  say that's the expensive mistake.
+
+What I learned: removing a measure doesn't mean "the other measures, minus the
+bad one". It changes what the average is made of. Punctuation was wrong on some
+of my pieces and protective on others. The real problem is that signal two's
+directions were set from four texts I generated, and that's what I'd fix next,
+by calibrating on real human writing.
 
 
 ---
