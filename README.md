@@ -405,6 +405,30 @@ milestone and made every commit myself.
   wording of all three labels from Claude's drafts, choosing the "no judgment"
   version of the unsure label.
 
+**Moment 3 (unit 8) — my own writing for criterion 1**
+
+- *What I asked for:* I asked Claude to write the ten pieces of "my own
+  writing" for criterion 1.
+- *What came back:* It refused, because AI text labeled as mine would make the
+  criterion test nothing. Instead it gave me ten short questions to answer.
+- *What I changed:* I wrote all ten answers myself, and those are the texts in
+  `scenarios.py`. That's why criterion 1 is a real result: 7 of 10 of my
+  actual pieces got the AI label.
+
+**Moment 4 (unit 8) — the improvement, and checking the evidence**
+
+- *What I asked for:* Options for one improvement, based on the diagnosis.
+- *What came back:* Four options (drop punctuation, raise the AI line,
+  reweight, validate input), each with its expected cost. After the re-run,
+  Claude noticed that the criterion 5 after-run had started seconds after the
+  attack run, while the per-IP rate-limit bucket was still full, so it wasn't
+  comparable. It re-ran those tests spaced out. It also caught two of its own
+  wrong statements in the diagnosis and corrected them against the data.
+- *What I changed:* I chose to drop the punctuation measure. It made my own
+  writing worse (7 to 8 of 10) and created two new false positives, and I
+  reported that rather than picking a different change after seeing the
+  results.
+
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
 ---
@@ -969,13 +993,39 @@ by calibrating on real human writing.
 <!-- For each attack still getting through and each criterion still missed:
      what you'd do, and why you stopped. -->
 
+The state after the improvement: 13 attacks broken, and criteria 1, 2, 3 and 5
+missed. The first thing I'd do is **undo my improvement**, since it made the
+false-positive side worse. I left it in because the brief allows one change,
+and the after-run has to show that change.
 
+**Criteria still missed**
 
-**The trade I'd make if this ran for real:**
+| Criterion | What I'd do | Why I stopped |
+|---|---|---|
+| 1. My writing labeled AI (8/10) | Re-calibrate signal two on real human writing (my ten pieces plus the FP attack texts) instead of four generated texts, then raise the AI line (see the trade below). | A proper calibration needs a held-out set so I'm not tuning to my own test, and the unit allows one change. |
+| 2. Gap 0.147 (target 0.30) | Same root cause: the human side scores like AI. Fixing signal two's calibration is the fix here too. A stronger signal one than gpt2 would also help. | Same as 1. |
+| 3. Human label never reached by writing | Either lower the weight on signal one or move the human line up to about 0.45, then check that the garbage inputs still can't reach it. | A threshold move is its own change, and on its own it would also let MF04-style garbage stay "human". |
+| 5. 429 instead of 400 for no-creator bodies | Validate the body *before* the limiter, or exempt requests that will be rejected anyway from the per-IP bucket, so a malformed request always gets its 400. | It needs a change to how Flask-Limiter is applied, and this unit's one change went to signal two. |
 
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
+**Attacks still getting through**
 
+| Attack(s) | What I'd do | Why I stopped |
+|---|---|---|
+| FP03, FP04 (careful non-native writer, rubric essay, now labeled AI) | The most urgent: revert the punctuation change, then raise the AI line. These are the writers my criteria exist to protect. | They're a result of the one change, kept so the before/after can be compared. |
+| EV01, EV08, PI01, PI02 (signal one fooled by typos, very short text, odd injected tokens) | Require a minimum length (about 50 words) before scoring, and compute perplexity on a spell-corrected copy so typos don't count as surprise. | Spell correction adds a dependency and its own errors. Out of scope for one unit. |
+| EV02, EV06, EV07 (signal two fooled by sentence shape and punctuation padding) | Accept that a surface signal can be reshaped on purpose. The fix is a better combining rule: only let the human side win when *both* signals agree it's human. | Changing the combining rule is a second improvement. |
+| EV10 (repeated stanzas, signals split 0.98 vs 0.29) | Let a very strong signal one (above 0.95) override a split instead of always turning disagreement into "unsure". | That risks plain human writing, which also scores high on signal one, so it would need its own testing. |
+| EV05 (heavy human editing) | Nothing at the signal level. After a heavy human edit the text really does read as human. I'd count this as an honest limit. | Not fixable with surface signals. |
+| MF04, MF05 (pure punctuation got "human"; a 160-letter single word got AI 0.999) | Route-level validation: refuse text with fewer than, say, 10 real words, with a 400, before either signal runs. | It's the cheapest fix on this list, and it's the one I'd do second, but it was a different change from the one I chose. |
+
+**The trade I'd make if this ran for real:** I would choose fewer wrong
+accusations: raise the AI line and treat almost everything as "unsure"
+unless the evidence is overwhelming, because the people my system wrongly
+accuses are plain, careful and non-native writers who can least afford to
+argue. The cost is paid by honest writers whose work competes with AI text
+that now gets through, and by readers who trust the site to tell the
+difference. I think that's a smaller harm than telling a real person their own
+work is fake.
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
